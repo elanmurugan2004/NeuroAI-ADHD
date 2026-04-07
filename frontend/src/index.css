@@ -1,0 +1,140 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #071427;
+  color: #ffffff;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: #0c1d36;
+  border: 1px solid #233b63;
+  border-radius: 12px;
+  color: white;
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+}
+
+button {
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.page {
+  padding: 24px;
+}
+
+.glass-card {
+  background: linear-gradient(180deg, #0b1d36 0%, #0a1830 100%);
+  border: 1px solid #1e3558;
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.section-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+}
+
+.section-subtitle {
+  margin: 0;
+  color: #9fb0ca;
+  font-size: 14px;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: white;
+}
+
+.secondary-btn {
+  background: transparent;
+  color: white;
+  border: 1px solid #2a4672;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: rgba(37, 99, 235, 0.15);
+  color: #93c5fd;
+  border: 1px solid #1d4ed8;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 14px;
+  border-bottom: 1px solid #1e3558;
+}
+
+th {
+  color: #9fb0ca;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+td {
+  color: #ffffff;
+  font-size: 14px;
+}
+@media (max-width: 1100px) {
+  .dashboard-grid-4,
+  .result-grid-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 768px) {
+  .mobile-stack {
+    grid-template-columns: 1fr !important;
+  }
+}
+select {
+  width: 100%;
+  padding: 12px 14px;
+  background: #0c1d36;
+  border: 1px solid #233b63;
+  border-radius: 12px;
+  color: white;
+  outline: none;
+  margin-bottom: 14px;
+}
