@@ -12,14 +12,44 @@ CACHE_DIR = ROOT_DIR / "data" / "processed" / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def extract_fmri_connectivity_features(file_path: str) -> dict:
-    img = nib.load(file_path)
-    shape = img.shape
-
+def get_harvard_oxford_atlas():
     atlas = fetch_atlas_harvard_oxford(
         "cort-maxprob-thr25-2mm",
         data_dir=str(RAW_DIR)
     )
+    labels = list(atlas.labels)
+
+    # remove background if present at first position
+    if labels and str(labels[0]).lower() in ["background", "0"]:
+        labels = labels[1:]
+
+    return atlas, labels
+
+
+def build_connection_index_mapping(n_regions: int):
+    """
+    Maps conn_k -> (region_i, region_j)
+    based on upper triangle indexing.
+    """
+    mapping = {}
+    k = 0
+    for i in range(n_regions):
+        for j in range(i + 1, n_regions):
+            mapping[f"conn_{k}"] = (i, j)
+            k += 1
+    return mapping
+
+
+def extract_fmri_connectivity_features(file_path: str):
+    """
+    Returns:
+      - fmri_features: dict of conn_* features
+      - region_labels: list of atlas region names
+      - connection_mapping: dict conn_k -> (i, j)
+    """
+    img = nib.load(file_path)
+
+    atlas, region_labels = get_harvard_oxford_atlas()
 
     masker = NiftiLabelsMasker(
         labels_img=atlas.maps,
@@ -29,37 +59,35 @@ def extract_fmri_connectivity_features(file_path: str) -> dict:
     )
 
     ts = masker.fit_transform(file_path)
-
-    # If uploaded file is 3D MRI, ts may be 1D or single-sample.
-    # Convert safely so backend does not crash.
     ts = np.asarray(ts)
 
     if ts.ndim == 1:
         ts = ts.reshape(1, -1)
 
-    # If there is only one timepoint, correlation matrix is not meaningful.
-    # Fall back to ROI mean features expanded into conn_* format.
+    n_regions = ts.shape[1]
+    connection_mapping = build_connection_index_mapping(n_regions)
+
+    # fallback for 3D / single-timepoint case
     if ts.shape[0] < 2:
-        row = {}
         roi_vals = ts[0]
+        fmri_features = {}
+        # fill only first n_regions as pseudo-features if needed
         for j, val in enumerate(roi_vals):
-            row[f"conn_{j}"] = float(val)
-        return row
+            fmri_features[f"conn_{j}"] = float(val)
+        return fmri_features, region_labels, connection_mapping
 
     connectivity = ConnectivityMeasure(kind="correlation")
     corr = connectivity.fit_transform([ts])[0]
-
-    # Replace NaN/Inf safely
     corr = np.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
 
     iu = np.triu_indices_from(corr, k=1)
     feat = corr[iu]
 
-    row = {}
+    fmri_features = {}
     for j, val in enumerate(feat):
-        row[f"conn_{j}"] = float(val)
+        fmri_features[f"conn_{j}"] = float(val)
 
-    return row
+    return fmri_features, region_labels, connection_mapping
 
 
 def build_multimodal_input(payload: dict, meta: dict, fmri_features: dict) -> pd.DataFrame:

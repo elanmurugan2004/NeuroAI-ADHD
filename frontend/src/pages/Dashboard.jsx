@@ -4,6 +4,7 @@ import StatCard from "../components/StatCard";
 
 export default function Dashboard() {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+
   const [stats, setStats] = useState({
     total_patients: 0,
     total_assessments: 0,
@@ -12,18 +13,27 @@ export default function Dashboard() {
     review_status: "No Data",
   });
 
+  const [recentAssessments, setRecentAssessments] = useState([]);
+
   useEffect(() => {
-    const loadStats = async () => {
+    const loadDashboardData = async () => {
       try {
-        const res = await API.get("/dashboard/stats");
-        setStats(res.data);
+        const statsRes = await API.get("/dashboard/stats");
+        setStats(statsRes.data);
+
+        const assessmentRes = await API.get("/assessments/");
+        setRecentAssessments(assessmentRes.data.slice(0, 5));
       } catch (error) {
-        console.error("Failed to fetch dashboard stats:", error);
+        console.error("Failed to load dashboard data:", error);
       }
     };
 
-    loadStats();
+    loadDashboardData();
   }, []);
+
+  const lowConfidence =
+    stats.latest_confidence !== "N/A" &&
+    parseFloat(String(stats.latest_confidence).replace("%", "")) < 70;
 
   return (
     <div className="page">
@@ -51,16 +61,35 @@ export default function Dashboard() {
         <StatCard title="Review Status" value={stats.review_status} hint="Latest assessment state" />
       </div>
 
+      {lowConfidence && (
+        <div style={styles.warningBox}>
+          Low-confidence latest prediction detected. Specialist review is strongly recommended.
+        </div>
+      )}
+
       <div style={styles.lowerGrid}>
         <div className="glass-card" style={styles.panel}>
-          <h3 style={{ marginTop: 0 }}>System Workflow</h3>
-          <ul style={styles.list}>
-            <li>Doctor authentication and secure access</li>
-            <li>Patient intake and demographic capture</li>
-            <li>MRI/fMRI upload and multimodal inputs</li>
-            <li>AI prediction with explainable interpretation</li>
-            <li>History tracking and structured report generation</li>
-          </ul>
+          <h3 style={{ marginTop: 0 }}>Recent Assessments</h3>
+
+          {recentAssessments.length > 0 ? (
+            <div style={styles.activityList}>
+              {recentAssessments.map((item) => (
+                <div key={item.id} style={styles.activityRow}>
+                  <div>
+                    <div style={styles.activityTitle}>
+                      {item.patient_name || `Patient ${item.patient_id}`}
+                    </div>
+                    <div style={styles.activitySub}>
+                      Prediction: {item.predicted_label} • Confidence: {item.confidence}%
+                    </div>
+                  </div>
+                  <div className="badge">#{item.id}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={styles.muted}>No recent assessments found</p>
+          )}
         </div>
 
         <div className="glass-card" style={styles.panel}>
@@ -108,18 +137,45 @@ const styles = {
     gap: "18px",
     marginBottom: "24px",
   },
+  warningBox: {
+    marginBottom: "24px",
+    background: "rgba(245, 158, 11, 0.14)",
+    border: "1px solid #f59e0b",
+    color: "#fde68a",
+    borderRadius: "16px",
+    padding: "16px",
+    fontWeight: "600",
+  },
   lowerGrid: {
     display: "grid",
-    gridTemplateColumns: "1.2fr 0.8fr",
+    gridTemplateColumns: "1.1fr 0.9fr",
     gap: "18px",
   },
   panel: {
     padding: "22px",
   },
-  list: {
-    color: "#d6e2f2",
-    lineHeight: 2,
-    paddingLeft: "20px",
+  activityList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  activityRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    padding: "14px 16px",
+    background: "#0d203d",
+    border: "1px solid #21406a",
+    borderRadius: "14px",
+  },
+  activityTitle: {
+    fontWeight: "700",
+  },
+  activitySub: {
+    color: "#9fb0ca",
+    fontSize: "13px",
+    marginTop: "4px",
   },
   muted: {
     color: "#9fb0ca",

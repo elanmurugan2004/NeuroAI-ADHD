@@ -21,17 +21,20 @@ export default function Login() {
   };
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await API.post("/auth/login", form);
-      localStorage.setItem("token", res.data.access_token);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
-      alert("Login successful");
-      navigate("/app/dashboard");
-    } catch (error) {
-      alert(error?.response?.data?.detail || "Login failed");
-    }
-  };
+  e.preventDefault();
+
+  try {
+    const res = await API.post("/auth/login", form);
+
+    localStorage.setItem("token", res.data.access_token);
+    localStorage.setItem("user", JSON.stringify(res.data.user));
+
+    alert("Login successful");
+    navigate("/app/dashboard");
+  } catch (error) {
+    alert(error?.response?.data?.detail || "Invalid email or password");
+  }
+};
 
   return (
     <div style={styles.page}>

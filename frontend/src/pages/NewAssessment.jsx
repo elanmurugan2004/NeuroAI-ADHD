@@ -1,9 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api/axios";
 
 export default function NewAssessment() {
   const navigate = useNavigate();
+
+  const [patients, setPatients] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileName, setFileName] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const [form, setForm] = useState({
     patient_id: "",
@@ -15,23 +20,79 @@ export default function NewAssessment() {
     site: "",
   });
 
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileName, setFileName] = useState("");
+  useEffect(() => {
+    const loadPatients = async () => {
+      try {
+        const res = await API.get("/patients/");
+        setPatients(res.data);
+      } catch (error) {
+        console.error("Failed to load patients:", error);
+      }
+    };
+
+    loadPatients();
+  }, []);
+
+  const handlePatientSelect = (e) => {
+    const patientId = e.target.value;
+    const selected = patients.find((p) => String(p.id) === String(patientId));
+
+    if (selected) {
+      setForm((prev) => ({
+        ...prev,
+        patient_id: selected.id,
+        full_name: selected.full_name || "",
+        age: selected.age || "",
+        gender: selected.gender || "Male",
+        iq: selected.iq ?? "",
+      }));
+    } else {
+      setForm((prev) => ({
+        ...prev,
+        patient_id: "",
+        full_name: "",
+        age: "",
+        gender: "Male",
+        iq: "",
+      }));
+    }
+  };
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleFileChange = (e) => {
+    setErrorMsg("");
     const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setFileName(file.name);
+
+    if (!file) return;
+
+    const name = file.name.toLowerCase();
+    if (!(name.endsWith(".nii") || name.endsWith(".nii.gz"))) {
+      setErrorMsg("Only .nii or .nii.gz files are allowed");
+      setSelectedFile(null);
+      setFileName("");
+      return;
     }
+
+    setSelectedFile(file);
+    setFileName(file.name);
   };
 
   const handleAssessment = async (e) => {
     e.preventDefault();
+    setErrorMsg("");
+
+    if (!form.patient_id) {
+      setErrorMsg("Please select a patient");
+      return;
+    }
+
+    if (!selectedFile) {
+      setErrorMsg("Please upload a valid MRI/fMRI NIfTI file");
+      return;
+    }
 
     try {
       const formData = new FormData();
@@ -42,10 +103,7 @@ export default function NewAssessment() {
       formData.append("iq", form.iq || "");
       formData.append("handedness", form.handedness);
       formData.append("site", form.site);
-
-      if (selectedFile) {
-        formData.append("mri_file", selectedFile);
-      }
+      formData.append("mri_file", selectedFile);
 
       const res = await API.post("/assessments/predict", formData, {
         headers: {
@@ -58,7 +116,7 @@ export default function NewAssessment() {
       navigate("/app/results");
     } catch (error) {
       console.error("Assessment failed:", error);
-      alert(error?.response?.data?.detail || "Assessment failed");
+      setErrorMsg(error?.response?.data?.detail || "Assessment failed");
     }
   };
 
@@ -70,15 +128,28 @@ export default function NewAssessment() {
             <div className="badge">ASSESSMENT WORKFLOW</div>
             <h1 style={styles.title}>New ADHD Assessment</h1>
             <p style={styles.subtitle}>
-              Enter patient details and upload a valid fMRI / NIfTI file to
-              generate an AI-assisted assessment result.
+              Select patient, review demographic details, upload a valid MRI/fMRI
+              NIfTI file, and generate an AI-assisted multimodal result.
             </p>
           </div>
 
-          <div className="badge">Step-Based Clinical Input</div>
+          <div className="badge">Secure Clinical Upload</div>
         </div>
 
         <form onSubmit={handleAssessment}>
+          <div className="glass-card" style={styles.sectionCard}>
+            <h2 style={styles.sectionTitle}>Patient Selection</h2>
+
+            <select value={form.patient_id} onChange={handlePatientSelect} required>
+              <option value="">Select Patient</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.id} - {p.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="glass-card" style={styles.sectionCard}>
             <h2 style={styles.sectionTitle}>Patient Details</h2>
 
@@ -92,20 +163,19 @@ export default function NewAssessment() {
 
             <div style={styles.twoCol}>
               <input
-                name="patient_id"
-                type="number"
-                placeholder="Patient ID"
-                value={form.patient_id}
-                onChange={handleChange}
-                required
-              />
-              <input
                 name="age"
                 type="number"
                 placeholder="Age"
                 value={form.age}
                 onChange={handleChange}
                 required
+              />
+              <input
+                name="iq"
+                type="number"
+                placeholder="IQ"
+                value={form.iq}
+                onChange={handleChange}
               />
             </div>
 
@@ -118,14 +188,6 @@ export default function NewAssessment() {
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
-
-            <input
-              name="iq"
-              type="number"
-              placeholder="IQ"
-              value={form.iq}
-              onChange={handleChange}
-            />
 
             <select
               name="handedness"
@@ -150,17 +212,23 @@ export default function NewAssessment() {
           <div className="glass-card" style={styles.sectionCard}>
             <h2 style={styles.sectionTitle}>Imaging Upload</h2>
 
-            <input type="file" accept=".nii,.nii.gz,.gz" onChange={handleFileChange} />
+            <input type="file" accept=".nii,.nii.gz" onChange={handleFileChange} />
 
             <div style={styles.uploadInfo}>
               {fileName ? `Selected file: ${fileName}` : "No file selected"}
             </div>
 
             <p style={styles.note}>
-              Upload a valid structural MRI or resting-state fMRI NIfTI file for
-              AI-assisted analysis.
+              Only validated `.nii` or `.nii.gz` neuroimaging files are accepted.
+              Invalid or corrupted files will be rejected.
             </p>
           </div>
+
+          {errorMsg && (
+            <div style={styles.errorBox}>
+              {errorMsg}
+            </div>
+          )}
 
           <button className="primary-btn" type="submit" style={styles.submitBtn}>
             Run AI Assessment
@@ -218,6 +286,14 @@ const styles = {
     marginTop: "12px",
     color: "#9fb0ca",
     lineHeight: 1.7,
+  },
+  errorBox: {
+    marginBottom: "16px",
+    background: "rgba(239, 68, 68, 0.14)",
+    border: "1px solid #ef4444",
+    color: "#fecaca",
+    borderRadius: "12px",
+    padding: "14px",
   },
   submitBtn: {
     width: "100%",

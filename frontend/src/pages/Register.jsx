@@ -16,15 +16,23 @@ export default function Register() {
   };
 
   const handleRegister = async (e) => {
-    e.preventDefault();
-    try {
-      await API.post("/auth/register", form);
-      alert("Registration successful");
-      navigate("/login");
-    } catch (error) {
-      alert(error?.response?.data?.detail || "Registration failed");
-    }
-  };
+  e.preventDefault();
+
+  try {
+    await API.post("/auth/register", {
+      full_name: form.full_name,
+      email: form.email,
+      password: form.password,
+      role: form.role,
+    });
+
+    alert("Registration successful");
+    navigate("/login");
+  } catch (error) {
+    console.log(error.response?.data); // 👈 IMPORTANT DEBUG
+    alert(error?.response?.data?.detail || "Registration failed");
+  }
+};
 
   return (
     <div style={styles.page}>

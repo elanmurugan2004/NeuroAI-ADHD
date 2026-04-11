@@ -18,6 +18,7 @@ export default function Patients() {
         setPatients(res.data);
       } catch (error) {
         console.error("Failed to fetch patients:", error);
+        alert(error?.response?.data?.detail || "Failed to fetch patients");
       }
     };
 
@@ -50,11 +51,19 @@ export default function Patients() {
         diagnosis_note: "",
       });
 
-      const res = await API.get("/patients/");
-      setPatients(res.data);
+      const reloadPatients = async () => {
+        try {
+          const res = await API.get("/patients/");
+          setPatients(res.data);
+        } catch (error) {
+          console.error("Failed to fetch patients:", error);
+          alert(error?.response?.data?.detail || "Failed to fetch patients");
+        }
+      };
+      await reloadPatients();
     } catch (error) {
       console.error("Failed to add patient:", error);
-      alert("Failed to add patient");
+      alert(error?.response?.data?.detail || "Failed to add patient");
     }
   };
 
@@ -62,136 +71,89 @@ export default function Patients() {
     <div className="page">
       <div className="glass-card" style={styles.headerCard}>
         <div>
-          <div className="badge">Clinical Intake Module</div>
-          <h1 style={styles.title}>Patient Management</h1>
+          <div className="badge">Patient Management</div>
+          <h1 style={styles.title}>Patients</h1>
           <p style={styles.subtitle}>
-            Register patient details, demographic information, and baseline notes
-            before running the ADHD assessment workflow.
+            Add and manage patient records before starting the assessment workflow.
           </p>
         </div>
       </div>
 
       <div style={styles.grid}>
         <div className="glass-card" style={styles.formCard}>
-          <h3 style={{ marginTop: 0 }}>Add New Patient</h3>
+          <h3 style={{ marginTop: 0 }}>Add Patient</h3>
 
           <form onSubmit={handleAddPatient}>
-            <label>Full Name</label>
             <input
               name="full_name"
-              placeholder="Enter patient name"
+              placeholder="Full Name"
               value={form.full_name}
               onChange={handleChange}
               required
             />
 
-            <div style={styles.twoCol}>
-              <div>
-                <label>Age</label>
-                <input
-                  name="age"
-                  type="number"
-                  placeholder="Age"
-                  value={form.age}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
+            <input
+              name="age"
+              type="number"
+              placeholder="Age"
+              value={form.age}
+              onChange={handleChange}
+              required
+            />
 
-              <div>
-                <label>Gender</label>
-                <input
-                  name="gender"
-                  placeholder="Male / Female"
-                  value={form.gender}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-            </div>
+            <select
+              name="gender"
+              value={form.gender}
+              onChange={handleChange}
+              required
+            >
+              <option value="">Select Gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
 
-            <label>IQ</label>
             <input
               name="iq"
               type="number"
-              placeholder="Enter IQ score"
+              placeholder="IQ"
               value={form.iq}
               onChange={handleChange}
             />
 
-            <label>Clinical Note</label>
             <textarea
               name="diagnosis_note"
-              rows="5"
-              placeholder="Add attention or behavioral observations"
+              placeholder="Initial note"
               value={form.diagnosis_note}
               onChange={handleChange}
+              rows="4"
             />
 
             <button className="primary-btn" type="submit" style={{ width: "100%" }}>
-              Save Patient
+              Add Patient
             </button>
           </form>
         </div>
 
-        <div className="glass-card" style={styles.infoCard}>
-          <h3 style={{ marginTop: 0 }}>Clinical Guidance</h3>
-          <p style={styles.muted}>
-            Ensure correct demographic details before starting the assessment.
-            Patient history improves review quality and supports longitudinal tracking.
-          </p>
+        <div className="glass-card" style={styles.listCard}>
+          <h3 style={{ marginTop: 0 }}>Patient List</h3>
 
-          <div style={styles.infoBox}>
-            <strong>Recommended fields</strong>
-            <ul style={styles.list}>
-              <li>Age and gender</li>
-              <li>IQ score if available</li>
-              <li>Initial behavioral note</li>
-              <li>Clinical review comments later</li>
-            </ul>
-          </div>
-
-          <div className="badge">Doctor-only Access</div>
-        </div>
-      </div>
-
-      <div className="glass-card" style={styles.tableCard}>
-        <div style={styles.topRow}>
-          <h3 style={{ margin: 0 }}>Registered Patients</h3>
-          <span className="badge">Total: {patients.length}</span>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Patient Name</th>
-                <th>Age</th>
-                <th>Gender</th>
-                <th>IQ</th>
-                <th>Clinical Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.length > 0 ? (
-                patients.map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.id}</td>
-                    <td>{p.full_name}</td>
-                    <td>{p.age}</td>
-                    <td>{p.gender}</td>
-                    <td>{p.iq ?? "-"}</td>
-                    <td>{p.diagnosis_note || "-"}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6">No patients found</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {patients.length > 0 ? (
+            <div style={styles.list}>
+              {patients.map((patient) => (
+                <div key={patient.id} style={styles.patientItem}>
+                  <div>
+                    <div style={styles.patientName}>{patient.full_name}</div>
+                    <div style={styles.patientMeta}>
+                      Age: {patient.age} | Gender: {patient.gender} | IQ: {patient.iq ?? "-"}
+                    </div>
+                  </div>
+                  <div className="badge">#{patient.id}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: "#9fb0ca" }}>No patients found</p>
+          )}
         </div>
       </div>
     </div>
@@ -209,49 +171,39 @@ const styles = {
   subtitle: {
     color: "#9fb0ca",
     lineHeight: 1.7,
-    maxWidth: "760px",
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "1.2fr 0.8fr",
+    gridTemplateColumns: "1fr 1fr",
     gap: "18px",
-    marginBottom: "24px",
   },
   formCard: {
     padding: "22px",
   },
-  infoCard: {
+  listCard: {
     padding: "22px",
-  },
-  twoCol: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "14px",
-  },
-  infoBox: {
-    marginTop: "18px",
-    background: "#0d203d",
-    border: "1px solid #21406a",
-    borderRadius: "16px",
-    padding: "16px",
   },
   list: {
-    color: "#cbd5e1",
-    lineHeight: 1.9,
-    marginBottom: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
   },
-  muted: {
-    color: "#9fb0ca",
-    lineHeight: 1.8,
-  },
-  tableCard: {
-    padding: "22px",
-  },
-  topRow: {
+  patientItem: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "18px",
     gap: "12px",
+    padding: "14px 16px",
+    background: "#0d203d",
+    border: "1px solid #21406a",
+    borderRadius: "14px",
+  },
+  patientName: {
+    fontWeight: "700",
+  },
+  patientMeta: {
+    color: "#9fb0ca",
+    fontSize: "13px",
+    marginTop: "4px",
   },
 };

@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
-import PredictionCard from "../components/PredictionCard";
-import RegionCard from "../components/RegionCard";
 
 export default function Results() {
   const navigate = useNavigate();
@@ -17,64 +15,41 @@ export default function Results() {
 
   if (!result) return null;
 
-  const adhdProb = result.adhd_score ? Number(result.adhd_score) : 0;
-  const controlProb = (1 - adhdProb).toFixed(4);
-
-  const regionData = [
-    {
-      name: result.important_region || "Precuneus Cortex",
-      contribution: "High",
-      score: result.adhd_score || 0.71,
-    },
-    {
-      name: "Parahippocampal Gyrus",
-      contribution: "Moderate",
-      score: 0.58,
-    },
-    {
-      name: "Fronto-Striatal Circuit",
-      contribution: "Moderate",
-      score: 0.52,
-    },
-  ];
+  const lowConfidence = Number(result.confidence || 0) < 70;
+  const topRegions = (result.top_regions || []).slice(0, 3);
 
   const handleDownloadReport = () => {
     const doc = new jsPDF();
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
-    doc.text("NEUROAI-ADHD ASSESSMENT REPORT", 20, 20);
+    doc.text("NEUROAI-ADHD CLINICAL REPORT", 20, 20);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
 
     let y = 35;
-
     const lines = [
       `Assessment ID: ${result.id || "-"}`,
-      `Patient ID: ${result.patient_id || "-"}`,
+      `Patient Name: ${result.patient_name || "-"}`,
       `Prediction: ${result.predicted_label || "-"}`,
-      `ADHD Probability: ${adhdProb ? adhdProb.toFixed(4) : "0.0000"}`,
-      `Control Probability: ${controlProb}`,
       `Confidence: ${result.confidence ? `${result.confidence}%` : "-"}`,
-      `Important Region: ${result.important_region || "-"}`,
-      `Created At: ${result.created_at || "-"}`,
+      `ADHD Probability: ${result.adhd_probability ?? "-"}`,
+      `Control Probability: ${result.control_probability ?? "-"}`,
+      `Uploaded File: ${result.uploaded_file || "-"}`,
       "",
-      "Clinical Interpretation:",
-      result.explanation ||
-        "Prediction generated using multimodal input values and explainable AI support.",
+      "Explainable AI Summary:",
+      result.clinical_summary || "-",
       "",
-      "Important Brain Regions:",
-      `1. ${regionData[0].name} - ${regionData[0].contribution} - Score: ${regionData[0].score}`,
-      `2. ${regionData[1].name} - ${regionData[1].contribution} - Score: ${regionData[1].score}`,
-      `3. ${regionData[2].name} - ${regionData[2].contribution} - Score: ${regionData[2].score}`,
+      "Top Brain Regions:",
+      ...topRegions.map((r, i) => `${i + 1}. ${r.name} - ${r.level}`),
       "",
-      "Recommendation:",
-      "Specialist clinical review is recommended before final diagnosis.",
+      "Clinical Recommendation:",
+      result.recommendation || "-",
     ];
 
     lines.forEach((line) => {
-      const wrapped = doc.splitTextToSize(line, 170);
+      const wrapped = doc.splitTextToSize(String(line), 170);
       doc.text(wrapped, 20, y);
       y += wrapped.length * 7;
       if (y > 270) {
@@ -83,111 +58,121 @@ export default function Results() {
       }
     });
 
-    doc.save("neuroai_adhd_report.pdf");
-  };
-
-  const handlePrint = () => {
-    window.print();
+    doc.save("neuroai_adhd_clinical_report.pdf");
   };
 
   return (
     <div className="page">
-      <div className="glass-card" style={styles.headerCard}>
-        <div style={styles.headerTop}>
+      <div className="glass-card" style={styles.heroCard}>
+        <div style={styles.heroTop}>
           <div>
-            <div className="badge">Prediction Report</div>
+            <div className="badge">AI CLINICAL REPORT</div>
             <h1 style={styles.title}>Assessment Results</h1>
             <p style={styles.subtitle}>
-              AI-generated clinical summary with prediction scores, explainable
-              interpretation, and important brain regions.
+              AI-assisted scan interpretation with doctor-friendly regional explanation.
             </p>
           </div>
 
-          <div style={styles.statusBox}>
-            <div style={styles.statusLabel}>Assessment ID</div>
-            <div style={styles.statusValue}>{result.id || "-"}</div>
+          <div style={styles.resultBox}>
+            <div style={styles.resultLabel}>Prediction</div>
+            <div
+              style={{
+                ...styles.resultValue,
+                color: result.predicted_label === "ADHD" ? "#f87171" : "#4ade80",
+              }}
+            >
+              {result.predicted_label}
+            </div>
           </div>
         </div>
 
         <div style={styles.actionRow}>
           <button className="primary-btn" onClick={handleDownloadReport}>
-            Download PDF Report
+            Download PDF
           </button>
-          <button className="secondary-btn" onClick={handlePrint}>
-            Print
+          <button className="secondary-btn" onClick={() => navigate("/app/history")}>
+            View History
           </button>
         </div>
       </div>
 
-      <div style={styles.cardGrid}>
-        <PredictionCard
-          title="Prediction"
-          value={result.predicted_label || "N/A"}
-          color={result.predicted_label === "ADHD" ? "#f87171" : "#4ade80"}
-        />
-        <PredictionCard
-          title="ADHD Probability"
-          value={adhdProb ? adhdProb.toFixed(4) : "0.0000"}
-          color="#93c5fd"
-        />
-        <PredictionCard
-          title="Control Probability"
-          value={controlProb}
-          color="#67e8f9"
-        />
-        <PredictionCard
-          title="Confidence"
-          value={result.confidence ? `${result.confidence}%` : "-"}
-          color="#fde68a"
-        />
-      </div>
+      {lowConfidence && (
+        <div style={styles.warningBox}>
+          Low-confidence prediction detected. Specialist review is recommended.
+        </div>
+      )}
 
-      <div style={styles.midGrid}>
-        <div className="glass-card" style={styles.panel}>
-          <h3 style={{ marginTop: 0 }}>Recommendation</h3>
-          <div style={styles.recommendationBox}>
-            Specialist clinical review is recommended before final diagnosis.
-          </div>
-
-          <h3>Neuro-Clinical Interpretation</h3>
-          <p style={styles.muted}>
-            {result.explanation ||
-              "Prediction generated using multimodal input values and explainable AI support. The output should be interpreted together with patient history, behavioral screening, and specialist evaluation."}
-          </p>
+      <div style={styles.metricGrid}>
+        <div className="glass-card" style={styles.metricCard}>
+          <div style={styles.metricTitle}>Confidence</div>
+          <div style={styles.metricValue}>{result.confidence}%</div>
         </div>
 
-        <div className="glass-card" style={styles.panel}>
-          <h3 style={{ marginTop: 0 }}>Assessment Metadata</h3>
-          <div style={styles.metaItem}>
-            <span>Patient ID</span>
-            <strong>{result.patient_id || "-"}</strong>
-          </div>
-          <div style={styles.metaItem}>
-            <span>Important Region</span>
-            <strong>{result.important_region || "-"}</strong>
-          </div>
-          <div style={styles.metaItem}>
-            <span>Created At</span>
-            <strong>{result.created_at || "-"}</strong>
-          </div>
-          <div style={styles.metaItem}>
-            <span>Review Status</span>
-            <strong>Pending</strong>
-          </div>
+        <div className="glass-card" style={styles.metricCard}>
+          <div style={styles.metricTitle}>ADHD Probability</div>
+          <div style={styles.metricValue}>{result.adhd_probability}</div>
+        </div>
+
+        <div className="glass-card" style={styles.metricCard}>
+          <div style={styles.metricTitle}>Control Probability</div>
+          <div style={styles.metricValue}>{result.control_probability}</div>
         </div>
       </div>
 
-      <div className="glass-card" style={styles.regionPanel}>
-        <h3 style={{ marginTop: 0 }}>Most Influential Brain Regions</h3>
-        <div style={styles.regionGrid}>
-          {regionData.map((region, index) => (
-            <RegionCard
-              key={index}
-              name={region.name}
-              contribution={region.contribution}
-              score={region.score}
-            />
-          ))}
+      <div className="glass-card" style={styles.sectionCard}>
+        <h3 style={styles.sectionTitle}>Explainable AI Summary</h3>
+        <div style={styles.summaryBox}>
+          {result.clinical_summary || "AI-based summary is not available."}
+        </div>
+      </div>
+
+      <div className="glass-card" style={styles.sectionCard}>
+        <div style={styles.sectionHeader}>
+          <h3 style={styles.sectionTitle}>AI-Highlighted Brain Regions</h3>
+          
+        </div>
+
+        {topRegions.length > 0 ? (
+          <div style={styles.regionGrid}>
+            {topRegions.map((region, index) => (
+              <div key={index} style={styles.regionCard}>
+                <div style={styles.regionName}>{region.name}</div>
+                <div style={styles.regionSub}>AI-highlighted for this scan</div>
+                <div style={styles.levelChip(region.level)}>{region.level}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={styles.muted}>No regional explanation available</p>
+        )}
+      </div>
+
+      <div className="glass-card" style={styles.sectionCard}>
+        <h3 style={styles.sectionTitle}>Clinical Recommendation</h3>
+        <div style={styles.recommendBox}>
+          {result.recommendation || "Clinical review is recommended."}
+        </div>
+      </div>
+
+      <div className="glass-card" style={styles.sectionCard}>
+        <h3 style={styles.sectionTitle}>Scan Details</h3>
+        <div style={styles.metaGrid}>
+          <div style={styles.metaItem}>
+            <div style={styles.metaLabel}>Patient Name</div>
+            <div style={styles.metaValue}>{result.patient_name || "-"}</div>
+          </div>
+          <div style={styles.metaItem}>
+            <div style={styles.metaLabel}>Uploaded Scan</div>
+            <div style={styles.metaValue}>{result.uploaded_file || "-"}</div>
+          </div>
+          <div style={styles.metaItem}>
+            <div style={styles.metaLabel}>Age</div>
+            <div style={styles.metaValue}>{result.age ?? "-"}</div>
+          </div>
+          <div style={styles.metaItem}>
+            <div style={styles.metaLabel}>Gender</div>
+            <div style={styles.metaValue}>{result.gender || "-"}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -195,20 +180,15 @@ export default function Results() {
 }
 
 const styles = {
-  headerCard: {
+  heroCard: {
     padding: "24px",
     marginBottom: "24px",
   },
-  headerTop: {
+  heroTop: {
     display: "flex",
     justifyContent: "space-between",
     gap: "16px",
     alignItems: "flex-start",
-  },
-  actionRow: {
-    display: "flex",
-    gap: "12px",
-    marginTop: "18px",
     flexWrap: "wrap",
   },
   title: {
@@ -219,63 +199,147 @@ const styles = {
     lineHeight: 1.7,
     maxWidth: "760px",
   },
-  statusBox: {
-    minWidth: "180px",
+  resultBox: {
+    minWidth: "210px",
     background: "#0d203d",
     border: "1px solid #21406a",
-    borderRadius: "18px",
-    padding: "16px",
+    borderRadius: "20px",
+    padding: "18px",
   },
-  statusLabel: {
+  resultLabel: {
     color: "#9fb0ca",
-    fontSize: "13px",
-    marginBottom: "8px",
+    fontSize: "14px",
+    marginBottom: "10px",
   },
-  statusValue: {
-    fontSize: "26px",
+  resultValue: {
+    fontSize: "34px",
     fontWeight: "800",
   },
-  cardGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: "18px",
+  actionRow: {
+    display: "flex",
+    gap: "12px",
+    marginTop: "18px",
+    flexWrap: "wrap",
+  },
+  warningBox: {
     marginBottom: "24px",
-  },
-  midGrid: {
-    display: "grid",
-    gridTemplateColumns: "1.2fr 0.8fr",
-    gap: "18px",
-    marginBottom: "24px",
-  },
-  panel: {
-    padding: "22px",
-  },
-  recommendationBox: {
-    background: "rgba(37, 99, 235, 0.14)",
-    border: "1px solid #2563eb",
+    background: "rgba(245, 158, 11, 0.14)",
+    border: "1px solid #f59e0b",
+    color: "#fde68a",
     borderRadius: "16px",
     padding: "16px",
-    color: "#dbeafe",
-    marginBottom: "20px",
+    fontWeight: "600",
   },
-  muted: {
+  metricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: "18px",
+    marginBottom: "24px",
+  },
+  metricCard: {
+    padding: "22px",
+  },
+  metricTitle: {
     color: "#9fb0ca",
-    lineHeight: 1.8,
+    fontSize: "14px",
+    marginBottom: "10px",
   },
-  metaItem: {
+  metricValue: {
+    fontWeight: "800",
+    fontSize: "28px",
+  },
+  sectionCard: {
+    padding: "22px",
+    marginBottom: "24px",
+  },
+  sectionHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "14px 0",
-    borderBottom: "1px solid #1e3558",
-    color: "#dbe7f3",
+    gap: "12px",
+    marginBottom: "14px",
   },
-  regionPanel: {
-    padding: "22px",
+  sectionTitle: {
+    marginTop: 0,
+    marginBottom: "14px",
+  },
+  summaryBox: {
+    background: "rgba(37, 99, 235, 0.14)",
+    border: "1px solid #2563eb",
+    borderRadius: "16px",
+    padding: "18px",
+    color: "#dbeafe",
+    lineHeight: 1.8,
   },
   regionGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "18px",
+    gap: "16px",
+  },
+  regionCard: {
+    background: "#0d203d",
+    border: "1px solid #21406a",
+    borderRadius: "18px",
+    padding: "18px",
+  },
+  regionName: {
+    fontWeight: "800",
+    fontSize: "18px",
+    marginBottom: "8px",
+  },
+  regionSub: {
+    color: "#9fb0ca",
+    fontSize: "13px",
+    marginBottom: "16px",
+  },
+  levelChip: (level) => ({
+    display: "inline-block",
+    padding: "8px 14px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: "700",
+    border: "1px solid #21406a",
+    background:
+      level === "High"
+        ? "rgba(239, 68, 68, 0.14)"
+        : level === "Moderate"
+        ? "rgba(245, 158, 11, 0.14)"
+        : "rgba(59, 130, 246, 0.14)",
+    color:
+      level === "High"
+        ? "#fca5a5"
+        : level === "Moderate"
+        ? "#fde68a"
+        : "#93c5fd",
+  }),
+  recommendBox: {
+    background: "rgba(16, 185, 129, 0.12)",
+    border: "1px solid #10b981",
+    borderRadius: "16px",
+    padding: "18px",
+    color: "#d1fae5",
+    lineHeight: 1.8,
+  },
+  metaGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gap: "14px",
+  },
+  metaItem: {
+    background: "#0d203d",
+    border: "1px solid #21406a",
+    borderRadius: "14px",
+    padding: "16px",
+  },
+  metaLabel: {
+    color: "#9fb0ca",
+    fontSize: "13px",
+    marginBottom: "8px",
+  },
+  metaValue: {
+    fontWeight: "700",
+  },
+  muted: {
+    color: "#9fb0ca",
   },
 };

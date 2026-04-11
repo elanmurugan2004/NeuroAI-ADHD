@@ -1,14 +1,29 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
+import re
 
 
-# ---------------- USER ----------------
 class UserRegister(BaseModel):
     full_name: str
     email: EmailStr
     password: str
     role: Optional[str] = "doctor"
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str):
+        if len(value) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        if not re.search(r"[A-Z]", value):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", value):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"[0-9]", value):
+            raise ValueError("Password must contain at least one number")
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>_\-+=/\\[\];']", value):
+            raise ValueError("Password must contain at least one special character")
+        return value
 
 
 class UserLogin(BaseModel):
@@ -27,7 +42,6 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
-# ---------------- PATIENT ----------------
 class PatientCreate(BaseModel):
     full_name: str
     age: int
@@ -48,16 +62,6 @@ class PatientOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-# ---------------- ASSESSMENT ----------------
-class AssessmentCreate(BaseModel):
-    patient_id: int
-    age: int
-    iq: Optional[float] = None
-    attention_score: float
-    hyperactivity_score: float
-    impulsivity_score: float
 
 
 class AssessmentOut(BaseModel):
