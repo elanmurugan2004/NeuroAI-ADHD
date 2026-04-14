@@ -1,7 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import API from "../api/axios";
 
+const MIN_AGE = 7;
+const MAX_AGE = 17;
+
 export default function Patients() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [patients, setPatients] = useState([]);
   const [form, setForm] = useState({
     full_name: "",
@@ -11,19 +18,67 @@ export default function Patients() {
     diagnosis_note: "",
   });
 
+  const searchTerm = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("search") || "";
+  }, [location.search]);
+
   useEffect(() => {
-    const loadPatients = async () => {
+    let cancelled = false;
+
+    const fetchPatients = async () => {
       try {
         const res = await API.get("/patients/");
-        setPatients(res.data);
+        if (!cancelled) {
+          setPatients(res.data);
+        }
       } catch (error) {
         console.error("Failed to fetch patients:", error);
-        alert(error?.response?.data?.detail || "Failed to fetch patients");
+        if (!cancelled) {
+          alert(error?.response?.data?.detail || "Failed to fetch patients");
+        }
       }
     };
 
-    loadPatients();
+    fetchPatients();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const filteredPatients = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+
+    if (!q) return patients;
+
+    return patients.filter((patient) => {
+      const fullName = String(patient.full_name || "").toLowerCase();
+      const gender = String(patient.gender || "").toLowerCase();
+      const id = String(patient.id || "");
+      const age = String(patient.age || "");
+      const iq = String(patient.iq ?? "");
+
+      return (
+        fullName.includes(q) ||
+        gender.includes(q) ||
+        id.includes(q) ||
+        age.includes(q) ||
+        iq.includes(q)
+      );
+    });
+  }, [patients, searchTerm]);
+
+  const handleSearchChange = (value) => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      navigate("/app/patients", { replace: true });
+      return;
+    }
+
+    navigate(`/app/patients?search=${encodeURIComponent(value)}`, { replace: true });
+  };
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -32,16 +87,23 @@ export default function Patients() {
   const handleAddPatient = async (e) => {
     e.preventDefault();
 
+    const ageValue = Number(form.age);
+
+    if (Number.isNaN(ageValue) || ageValue < MIN_AGE || ageValue > MAX_AGE) {
+      alert(
+        `This project currently supports pediatric ADHD assessment only (age ${MIN_AGE}-${MAX_AGE}).`
+      );
+      return;
+    }
+
     try {
       await API.post("/patients/", {
-        full_name: form.full_name,
-        age: Number(form.age),
+        full_name: form.full_name.trim(),
+        age: ageValue,
         gender: form.gender,
         iq: form.iq ? Number(form.iq) : null,
         diagnosis_note: form.diagnosis_note,
       });
-
-      alert("Patient added successfully");
 
       setForm({
         full_name: "",
@@ -51,16 +113,8 @@ export default function Patients() {
         diagnosis_note: "",
       });
 
-      const reloadPatients = async () => {
-        try {
-          const res = await API.get("/patients/");
-          setPatients(res.data);
-        } catch (error) {
-          console.error("Failed to fetch patients:", error);
-          alert(error?.response?.data?.detail || "Failed to fetch patients");
-        }
-      };
-      await reloadPatients();
+      const res = await API.get("/patients/");
+      setPatients(res.data);
     } catch (error) {
       console.error("Failed to add patient:", error);
       alert(error?.response?.data?.detail || "Failed to add patient");
@@ -74,9 +128,21 @@ export default function Patients() {
           <div className="badge">Patient Management</div>
           <h1 style={styles.title}>Patients</h1>
           <p style={styles.subtitle}>
-            Add and manage patient records before starting the assessment workflow.
+            Add and manage pediatric patient records before starting the ADHD assessment workflow.
           </p>
+          <div style={styles.infoNote}>
+            This module currently supports pediatric ADHD screening only ({MIN_AGE}-{MAX_AGE} years).
+          </div>
         </div>
+      </div>
+
+      <div className="glass-card" style={styles.searchCard}>
+        <input
+          type="text"
+          placeholder="Search by patient name, ID, age, gender, or IQ"
+          value={searchTerm}
+          onChange={(e) => handleSearchChange(e.target.value)}
+        />
       </div>
 
       <div style={styles.grid}>
@@ -95,7 +161,9 @@ export default function Patients() {
             <input
               name="age"
               type="number"
-              placeholder="Age"
+              min={MIN_AGE}
+              max={MAX_AGE}
+              placeholder={`Age (${MIN_AGE}-${MAX_AGE})`}
               value={form.age}
               onChange={handleChange}
               required
@@ -135,11 +203,16 @@ export default function Patients() {
         </div>
 
         <div className="glass-card" style={styles.listCard}>
-          <h3 style={{ marginTop: 0 }}>Patient List</h3>
+          <div style={styles.listHeader}>
+            <h3 style={{ marginTop: 0, marginBottom: 0 }}>Patient List</h3>
+            <span style={styles.countBadge}>
+              {filteredPatients.length} result{filteredPatients.length !== 1 ? "s" : ""}
+            </span>
+          </div>
 
-          {patients.length > 0 ? (
+          {filteredPatients.length > 0 ? (
             <div style={styles.list}>
-              {patients.map((patient) => (
+              {filteredPatients.map((patient) => (
                 <div key={patient.id} style={styles.patientItem}>
                   <div>
                     <div style={styles.patientName}>{patient.full_name}</div>
@@ -152,7 +225,7 @@ export default function Patients() {
               ))}
             </div>
           ) : (
-            <p style={{ color: "#9fb0ca" }}>No patients found</p>
+            <p style={{ color: "#9fb0ca" }}>No matching patients found</p>
           )}
         </div>
       </div>
@@ -165,12 +238,27 @@ const styles = {
     padding: "24px",
     marginBottom: "24px",
   },
+  searchCard: {
+    padding: "18px",
+    marginBottom: "24px",
+  },
   title: {
     margin: "14px 0 10px",
   },
   subtitle: {
     color: "#9fb0ca",
     lineHeight: 1.7,
+    marginBottom: "10px",
+  },
+  infoNote: {
+    display: "inline-block",
+    background: "rgba(59, 130, 246, 0.12)",
+    border: "1px solid #3b82f6",
+    color: "#dbeafe",
+    borderRadius: "12px",
+    padding: "10px 14px",
+    fontSize: "13px",
+    fontWeight: "600",
   },
   grid: {
     display: "grid",
@@ -182,6 +270,22 @@ const styles = {
   },
   listCard: {
     padding: "22px",
+  },
+  listHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "14px",
+    gap: "12px",
+  },
+  countBadge: {
+    fontSize: "12px",
+    fontWeight: "700",
+    color: "#dbeafe",
+    background: "rgba(59, 130, 246, 0.12)",
+    border: "1px solid #3b82f6",
+    borderRadius: "999px",
+    padding: "6px 12px",
   },
   list: {
     display: "flex",

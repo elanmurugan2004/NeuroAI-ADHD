@@ -4,7 +4,13 @@ import { jsPDF } from "jspdf";
 
 export default function Results() {
   const navigate = useNavigate();
-  const result = JSON.parse(localStorage.getItem("assessment_result") || "null");
+
+  let result = null;
+  try {
+    result = JSON.parse(localStorage.getItem("assessment_result") || "null");
+  } catch {
+    result = null;
+  }
 
   useEffect(() => {
     if (!result) {
@@ -16,7 +22,22 @@ export default function Results() {
   if (!result) return null;
 
   const lowConfidence = Number(result.confidence || 0) < 70;
-  const topRegions = (result.top_regions || []).slice(0, 3);
+  const topRegions = Array.isArray(result.top_regions)
+    ? result.top_regions.slice(0, 3)
+    : [];
+
+  const getContributionLevel = (value) => {
+    const score = Number(value || 0);
+    if (score >= 20) return "High";
+    if (score >= 10) return "Moderate";
+    return "Mild";
+  };
+
+  const formatNumber = (value, digits = 2) => {
+    const num = Number(value);
+    if (Number.isNaN(num)) return "-";
+    return num.toFixed(digits);
+  };
 
   const handleDownloadReport = () => {
     const doc = new jsPDF();
@@ -34,18 +55,24 @@ export default function Results() {
       `Patient Name: ${result.patient_name || "-"}`,
       `Prediction: ${result.predicted_label || "-"}`,
       `Confidence: ${result.confidence ? `${result.confidence}%` : "-"}`,
-      `ADHD Probability: ${result.adhd_probability ?? "-"}`,
-      `Control Probability: ${result.control_probability ?? "-"}`,
+      `ADHD Probability: ${formatNumber(result.adhd_probability)}`,
+      `Control Probability: ${formatNumber(result.control_probability)}`,
       `Uploaded File: ${result.uploaded_file || "-"}`,
       "",
       "Explainable AI Summary:",
       result.clinical_summary || "-",
       "",
       "Top Brain Regions:",
-      ...topRegions.map((r, i) => `${i + 1}. ${r.name} - ${r.level}`),
+      ...topRegions.map(
+        (r, i) =>
+          `${i + 1}. ${r.region || "-"} - ${formatNumber(r.contribution)} (${r.level || getContributionLevel(r.contribution)})`
+      ),
       "",
       "Clinical Recommendation:",
       result.recommendation || "-",
+      "",
+      "Interpretation Note:",
+      result.interpretation_note || "This explanation reflects AI model influence and not direct structural damage.",
     ];
 
     lines.forEach((line) => {
@@ -81,7 +108,7 @@ export default function Results() {
                 color: result.predicted_label === "ADHD" ? "#f87171" : "#4ade80",
               }}
             >
-              {result.predicted_label}
+              {result.predicted_label || "-"}
             </div>
           </div>
         </div>
@@ -105,17 +132,19 @@ export default function Results() {
       <div style={styles.metricGrid}>
         <div className="glass-card" style={styles.metricCard}>
           <div style={styles.metricTitle}>Confidence</div>
-          <div style={styles.metricValue}>{result.confidence}%</div>
+          <div style={styles.metricValue}>
+            {result.confidence ? `${result.confidence}%` : "-"}
+          </div>
         </div>
 
         <div className="glass-card" style={styles.metricCard}>
           <div style={styles.metricTitle}>ADHD Probability</div>
-          <div style={styles.metricValue}>{result.adhd_probability}</div>
+          <div style={styles.metricValue}>{formatNumber(result.adhd_probability)}</div>
         </div>
 
         <div className="glass-card" style={styles.metricCard}>
           <div style={styles.metricTitle}>Control Probability</div>
-          <div style={styles.metricValue}>{result.control_probability}</div>
+          <div style={styles.metricValue}>{formatNumber(result.control_probability)}</div>
         </div>
       </div>
 
@@ -128,19 +157,37 @@ export default function Results() {
 
       <div className="glass-card" style={styles.sectionCard}>
         <div style={styles.sectionHeader}>
-          <h3 style={styles.sectionTitle}>AI-Highlighted Brain Regions</h3>
-          
+          <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>
+            AI-Highlighted Brain Regions
+          </h3>
         </div>
 
         {topRegions.length > 0 ? (
           <div style={styles.regionGrid}>
-            {topRegions.map((region, index) => (
-              <div key={index} style={styles.regionCard}>
-                <div style={styles.regionName}>{region.name}</div>
-                <div style={styles.regionSub}>AI-highlighted for this scan</div>
-                <div style={styles.levelChip(region.level)}>{region.level}</div>
-              </div>
-            ))}
+            {topRegions.map((region, index) => {
+              const level = region.level || getContributionLevel(region.contribution);
+
+              return (
+                <div key={index} style={styles.regionCard}>
+                  <div>
+                    <div style={styles.regionName}>
+                      {region.region || `Atlas Region ${index + 1}`}
+                    </div>
+                    <div style={styles.regionSub}>Most influential for this scan</div>
+                    <div style={styles.meaningText}>
+                      {region.meaning || "Region identified by Explainable AI as influential for this scan."}
+                    </div>
+                  </div>
+
+                  <div style={styles.regionBottom}>
+                    <div style={styles.scoreText}>
+                      Contribution: {formatNumber(region.contribution)}
+                    </div>
+                    <div style={styles.levelChip(level)}>{level}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p style={styles.muted}>No regional explanation available</p>
@@ -155,23 +202,43 @@ export default function Results() {
       </div>
 
       <div className="glass-card" style={styles.sectionCard}>
+        <h3 style={styles.sectionTitle}>Interpretation Note</h3>
+        <div style={styles.noteBox}>
+          {result.interpretation_note || "This explanation reflects AI model influence and not direct structural damage."}
+        </div>
+      </div>
+
+      <div className="glass-card" style={styles.sectionCard}>
         <h3 style={styles.sectionTitle}>Scan Details</h3>
         <div style={styles.metaGrid}>
           <div style={styles.metaItem}>
             <div style={styles.metaLabel}>Patient Name</div>
             <div style={styles.metaValue}>{result.patient_name || "-"}</div>
           </div>
+
           <div style={styles.metaItem}>
             <div style={styles.metaLabel}>Uploaded Scan</div>
             <div style={styles.metaValue}>{result.uploaded_file || "-"}</div>
           </div>
+
           <div style={styles.metaItem}>
             <div style={styles.metaLabel}>Age</div>
             <div style={styles.metaValue}>{result.age ?? "-"}</div>
           </div>
+
           <div style={styles.metaItem}>
             <div style={styles.metaLabel}>Gender</div>
             <div style={styles.metaValue}>{result.gender || "-"}</div>
+          </div>
+
+          <div style={styles.metaItem}>
+            <div style={styles.metaLabel}>IQ</div>
+            <div style={styles.metaValue}>{result.iq ?? "-"}</div>
+          </div>
+
+          <div style={styles.metaItem}>
+            <div style={styles.metaLabel}>Handedness</div>
+            <div style={styles.metaValue}>{result.handedness || "-"}</div>
           </div>
         </div>
       </div>
@@ -273,7 +340,7 @@ const styles = {
   },
   regionGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
     gap: "16px",
   },
   regionCard: {
@@ -281,6 +348,10 @@ const styles = {
     border: "1px solid #21406a",
     borderRadius: "18px",
     padding: "18px",
+    minHeight: "180px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
   },
   regionName: {
     fontWeight: "800",
@@ -290,7 +361,25 @@ const styles = {
   regionSub: {
     color: "#9fb0ca",
     fontSize: "13px",
-    marginBottom: "16px",
+    marginBottom: "10px",
+  },
+  meaningText: {
+    color: "#dbeafe",
+    fontSize: "13px",
+    lineHeight: 1.6,
+  },
+  regionBottom: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    flexWrap: "wrap",
+    marginTop: "16px",
+  },
+  scoreText: {
+    color: "#dbeafe",
+    fontSize: "13px",
+    fontWeight: "600",
   },
   levelChip: (level) => ({
     display: "inline-block",
@@ -318,6 +407,14 @@ const styles = {
     borderRadius: "16px",
     padding: "18px",
     color: "#d1fae5",
+    lineHeight: 1.8,
+  },
+  noteBox: {
+    background: "rgba(59, 130, 246, 0.12)",
+    border: "1px solid #3b82f6",
+    borderRadius: "16px",
+    padding: "18px",
+    color: "#dbeafe",
     lineHeight: 1.8,
   },
   metaGrid: {

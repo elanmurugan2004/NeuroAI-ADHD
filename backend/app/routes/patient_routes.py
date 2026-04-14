@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -8,6 +8,9 @@ from app.auth import get_current_user
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
+MIN_AGE = 7
+MAX_AGE = 17
+
 
 @router.post("/", response_model=PatientOut)
 def create_patient(
@@ -15,13 +18,19 @@ def create_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if patient.age < MIN_AGE or patient.age > MAX_AGE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This project currently supports pediatric ADHD assessment only (age {MIN_AGE}-{MAX_AGE})."
+        )
+
     new_patient = Patient(
         doctor_id=current_user.id,
         full_name=patient.full_name,
         age=patient.age,
         gender=patient.gender,
         iq=patient.iq,
-        diagnosis_note=patient.diagnosis_note
+        diagnosis_note=patient.diagnosis_note,
     )
     db.add(new_patient)
     db.commit()

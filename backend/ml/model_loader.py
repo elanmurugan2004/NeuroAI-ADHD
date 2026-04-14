@@ -1,22 +1,44 @@
 from pathlib import Path
-import json
 import joblib
+from tensorflow.keras.models import load_model
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 MODEL_DIR = ROOT_DIR / "models"
 
-_pipeline = None
+_bilstm = None
+_transformer = None
+_preprocessor = None
 _meta = None
 
 
-def load_multimodal_model():
-    global _pipeline, _meta
+def _require_file(path: Path):
+    if not path.exists():
+        raise FileNotFoundError(f"Required model file not found: {path}")
 
-    if _pipeline is None:
-        _pipeline = joblib.load(MODEL_DIR / "multimodal_pipeline.joblib")
+
+def load_ensemble_models():
+    global _bilstm, _transformer, _preprocessor, _meta
+
+    bilstm_path = MODEL_DIR / "bilstm_model.h5"
+    transformer_path = MODEL_DIR / "transformer_model.h5"
+    preprocessor_path = MODEL_DIR / "preprocessor.pkl"
+    meta_path = MODEL_DIR / "ensemble_meta.pkl"
+
+    _require_file(bilstm_path)
+    _require_file(transformer_path)
+    _require_file(preprocessor_path)
+    _require_file(meta_path)
+
+    if _bilstm is None:
+        _bilstm = load_model(str(bilstm_path), compile=False)
+
+    if _transformer is None:
+        _transformer = load_model(str(transformer_path), compile=False)
+
+    if _preprocessor is None:
+        _preprocessor = joblib.load(preprocessor_path)
 
     if _meta is None:
-        with open(MODEL_DIR / "multimodal_meta.json", "r", encoding="utf-8") as f:
-            _meta = json.load(f)
+        _meta = joblib.load(meta_path)
 
-    return _pipeline, _meta
+    return _bilstm, _transformer, _preprocessor, _meta

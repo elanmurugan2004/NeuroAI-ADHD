@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api/axios";
 
+const MIN_AGE = 7;
+const MAX_AGE = 17;
+
 export default function NewAssessment() {
   const navigate = useNavigate();
 
@@ -21,31 +24,50 @@ export default function NewAssessment() {
   });
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadPatients = async () => {
       try {
         const res = await API.get("/patients/");
-        setPatients(res.data);
+        if (!cancelled) {
+          setPatients(res.data);
+        }
       } catch (error) {
         console.error("Failed to load patients:", error);
+        if (!cancelled) {
+          setErrorMsg(error?.response?.data?.detail || "Failed to load patients");
+        }
       }
     };
 
     loadPatients();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handlePatientSelect = (e) => {
+    setErrorMsg("");
+
     const patientId = e.target.value;
     const selected = patients.find((p) => String(p.id) === String(patientId));
 
     if (selected) {
       setForm((prev) => ({
         ...prev,
-        patient_id: selected.id,
+        patient_id: String(selected.id),
         full_name: selected.full_name || "",
         age: selected.age || "",
         gender: selected.gender || "Male",
         iq: selected.iq ?? "",
       }));
+
+      if (Number(selected.age) < MIN_AGE || Number(selected.age) > MAX_AGE) {
+        setErrorMsg(
+          `This project currently supports pediatric ADHD assessment only (age ${MIN_AGE}-${MAX_AGE}).`
+        );
+      }
     } else {
       setForm((prev) => ({
         ...prev,
@@ -59,6 +81,7 @@ export default function NewAssessment() {
   };
 
   const handleChange = (e) => {
+    setErrorMsg("");
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
@@ -66,7 +89,11 @@ export default function NewAssessment() {
     setErrorMsg("");
     const file = e.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      setSelectedFile(null);
+      setFileName("");
+      return;
+    }
 
     const name = file.name.toLowerCase();
     if (!(name.endsWith(".nii") || name.endsWith(".nii.gz"))) {
@@ -89,8 +116,16 @@ export default function NewAssessment() {
       return;
     }
 
+    const ageValue = Number(form.age);
+    if (Number.isNaN(ageValue) || ageValue < MIN_AGE || ageValue > MAX_AGE) {
+      setErrorMsg(
+        `This project currently supports pediatric ADHD assessment only (age ${MIN_AGE}-${MAX_AGE}).`
+      );
+      return;
+    }
+
     if (!selectedFile) {
-      setErrorMsg("Please upload a valid MRI/fMRI NIfTI file");
+      setErrorMsg("Please upload a valid fMRI NIfTI file");
       return;
     }
 
@@ -98,11 +133,11 @@ export default function NewAssessment() {
       const formData = new FormData();
       formData.append("patient_id", form.patient_id);
       formData.append("full_name", form.full_name);
-      formData.append("age", form.age);
+      formData.append("age", String(ageValue));
       formData.append("gender", form.gender);
-      formData.append("iq", form.iq || "");
+      formData.append("iq", form.iq ? String(Number(form.iq)) : "");
       formData.append("handedness", form.handedness);
-      formData.append("site", form.site);
+      formData.append("site", form.site || "Unknown");
       formData.append("mri_file", selectedFile);
 
       const res = await API.post("/assessments/predict", formData, {
@@ -112,7 +147,6 @@ export default function NewAssessment() {
       });
 
       localStorage.setItem("assessment_result", JSON.stringify(res.data));
-      alert("Assessment completed successfully");
       navigate("/app/results");
     } catch (error) {
       console.error("Assessment failed:", error);
@@ -128,9 +162,12 @@ export default function NewAssessment() {
             <div className="badge">ASSESSMENT WORKFLOW</div>
             <h1 style={styles.title}>New ADHD Assessment</h1>
             <p style={styles.subtitle}>
-              Select patient, review demographic details, upload a valid MRI/fMRI
-              NIfTI file, and generate an AI-assisted multimodal result.
+              Select a pediatric patient, review demographic details, upload a valid
+              resting-state fMRI NIfTI file, and generate an AI-assisted multimodal result.
             </p>
+            <div style={styles.infoNote}>
+              Pediatric ADHD module: supported age range {MIN_AGE}-{MAX_AGE} years
+            </div>
           </div>
 
           <div className="badge">Secure Clinical Upload</div>
@@ -165,7 +202,9 @@ export default function NewAssessment() {
               <input
                 name="age"
                 type="number"
-                placeholder="Age"
+                min={MIN_AGE}
+                max={MAX_AGE}
+                placeholder={`Age (${MIN_AGE}-${MAX_AGE})`}
                 value={form.age}
                 onChange={handleChange}
                 required
@@ -219,16 +258,12 @@ export default function NewAssessment() {
             </div>
 
             <p style={styles.note}>
-              Only validated `.nii` or `.nii.gz` neuroimaging files are accepted.
-              Invalid or corrupted files will be rejected.
+              Only validated <code>.nii</code> or <code>.nii.gz</code> neuroimaging files are accepted.
+              This assessment module is currently intended for pediatric ADHD screening and requires a 4D resting-state fMRI file.
             </p>
           </div>
 
-          {errorMsg && (
-            <div style={styles.errorBox}>
-              {errorMsg}
-            </div>
-          )}
+          {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
 
           <button className="primary-btn" type="submit" style={styles.submitBtn}>
             Run AI Assessment
@@ -262,6 +297,17 @@ const styles = {
     lineHeight: 1.8,
     maxWidth: "760px",
     fontSize: "18px",
+    marginBottom: "12px",
+  },
+  infoNote: {
+    display: "inline-block",
+    background: "rgba(59, 130, 246, 0.12)",
+    border: "1px solid #3b82f6",
+    color: "#dbeafe",
+    borderRadius: "12px",
+    padding: "10px 14px",
+    fontSize: "13px",
+    fontWeight: "600",
   },
   sectionCard: {
     padding: "24px",
