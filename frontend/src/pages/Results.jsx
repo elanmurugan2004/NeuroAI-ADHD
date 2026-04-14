@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
 
@@ -19,12 +19,19 @@ export default function Results() {
     }
   }, [result, navigate]);
 
+  const topRegions = useMemo(() => {
+    if (!result || !Array.isArray(result.top_regions)) return [];
+    return result.top_regions.slice(0, 3);
+  }, [result]);
+
+  const topConnections = useMemo(() => {
+    if (!result || !Array.isArray(result.top_connections)) return [];
+    return result.top_connections.slice(0, 5);
+  }, [result]);
+
   if (!result) return null;
 
   const lowConfidence = Number(result.confidence || 0) < 70;
-  const topRegions = Array.isArray(result.top_regions)
-    ? result.top_regions.slice(0, 3)
-    : [];
 
   const getContributionLevel = (value) => {
     const score = Number(value || 0);
@@ -39,6 +46,9 @@ export default function Results() {
     return num.toFixed(digits);
   };
 
+  const hasOriginalPreview = Boolean(result.scan_preview_original);
+  const hasOverlayPreview = Boolean(result.scan_preview_overlay);
+
   const handleDownloadReport = () => {
     const doc = new jsPDF();
 
@@ -50,6 +60,7 @@ export default function Results() {
     doc.setFontSize(11);
 
     let y = 35;
+
     const lines = [
       `Assessment ID: ${result.id || "-"}`,
       `Patient Name: ${result.patient_name || "-"}`,
@@ -57,6 +68,8 @@ export default function Results() {
       `Confidence: ${result.confidence ? `${result.confidence}%` : "-"}`,
       `ADHD Probability: ${formatNumber(result.adhd_probability)}`,
       `Control Probability: ${formatNumber(result.control_probability)}`,
+      `BiLSTM Probability: ${formatNumber(result.bilstm_probability)}`,
+      `Transformer Probability: ${formatNumber(result.transformer_probability)}`,
       `Uploaded File: ${result.uploaded_file || "-"}`,
       "",
       "Explainable AI Summary:",
@@ -68,17 +81,22 @@ export default function Results() {
           `${i + 1}. ${r.region || "-"} - ${formatNumber(r.contribution)} (${r.level || getContributionLevel(r.contribution)})`
       ),
       "",
-      "Clinical Recommendation:",
-      result.recommendation || "-",
+      "Top Connections:",
+      ...topConnections.map(
+        (c, i) =>
+          `${i + 1}. ${c.connection || "-"} - ${formatNumber(c.contribution)}`
+      ),
       "",
-      "Interpretation Note:",
-      result.interpretation_note || "This explanation reflects AI model influence and not direct structural damage.",
+      "Scan Preview:",
+      hasOriginalPreview ? "Original uploaded scan preview generated from the patient fMRI." : "Original scan preview not available.",
+      hasOverlayPreview ? "AI overlay preview generated from the same uploaded scan." : "AI overlay preview not available.",
     ];
 
     lines.forEach((line) => {
       const wrapped = doc.splitTextToSize(String(line), 170);
       doc.text(wrapped, 20, y);
       y += wrapped.length * 7;
+
       if (y > 270) {
         doc.addPage();
         y = 20;
@@ -96,7 +114,8 @@ export default function Results() {
             <div className="badge">AI CLINICAL REPORT</div>
             <h1 style={styles.title}>Assessment Results</h1>
             <p style={styles.subtitle}>
-              AI-assisted scan interpretation with doctor-friendly regional explanation.
+              Real uploaded scan preview with AI-highlighted brain regions and
+              deep-learning ensemble prediction.
             </p>
           </div>
 
@@ -125,7 +144,8 @@ export default function Results() {
 
       {lowConfidence && (
         <div style={styles.warningBox}>
-          Low-confidence prediction detected. Specialist review is recommended.
+          Low-confidence prediction detected. Please review the uploaded scan and
+          AI-highlighted regions carefully.
         </div>
       )}
 
@@ -158,6 +178,46 @@ export default function Results() {
       <div className="glass-card" style={styles.sectionCard}>
         <div style={styles.sectionHeader}>
           <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>
+            Uploaded Scan Preview
+          </h3>
+        </div>
+
+        <div style={styles.previewGrid}>
+          <div style={styles.previewCard}>
+            <div style={styles.previewLabel}>Original Uploaded Scan</div>
+            {hasOriginalPreview ? (
+              <img
+                src={result.scan_preview_original}
+                alt="Original uploaded brain scan preview"
+                style={styles.previewImage}
+              />
+            ) : (
+              <div style={styles.previewFallback}>
+                Original scan preview not available.
+              </div>
+            )}
+          </div>
+
+          <div style={styles.previewCard}>
+            <div style={styles.previewLabel}>AI Overlay on Uploaded Scan</div>
+            {hasOverlayPreview ? (
+              <img
+                src={result.scan_preview_overlay}
+                alt="AI overlay brain scan preview"
+                style={styles.previewImage}
+              />
+            ) : (
+              <div style={styles.previewFallback}>
+                AI overlay preview not available.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-card" style={styles.sectionCard}>
+        <div style={styles.sectionHeader}>
+          <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>
             AI-Highlighted Brain Regions
           </h3>
         </div>
@@ -173,9 +233,12 @@ export default function Results() {
                     <div style={styles.regionName}>
                       {region.region || `Atlas Region ${index + 1}`}
                     </div>
-                    <div style={styles.regionSub}>Most influential for this scan</div>
+                    <div style={styles.regionSub}>
+                      Most influential for this uploaded scan
+                    </div>
                     <div style={styles.meaningText}>
-                      {region.meaning || "Region identified by Explainable AI as influential for this scan."}
+                      {region.meaning ||
+                        "Region identified by Explainable AI as influential for this scan."}
                     </div>
                   </div>
 
@@ -195,21 +258,34 @@ export default function Results() {
       </div>
 
       <div className="glass-card" style={styles.sectionCard}>
-        <h3 style={styles.sectionTitle}>Clinical Recommendation</h3>
-        <div style={styles.recommendBox}>
-          {result.recommendation || "Clinical review is recommended."}
-        </div>
+        <h3 style={styles.sectionTitle}>Top Region Connections</h3>
+
+        {topConnections.length > 0 ? (
+          <div style={styles.connectionList}>
+            {topConnections.map((item, index) => (
+              <div key={index} style={styles.connectionItem}>
+                <div>
+                  <div style={styles.connectionName}>
+                    {item.connection || `Connection ${index + 1}`}
+                  </div>
+                  <div style={styles.connectionSub}>
+                    Strongest region-to-region influence in this scan
+                  </div>
+                </div>
+
+                <div style={styles.connectionScore}>
+                  {formatNumber(item.contribution)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={styles.muted}>No connection-level explanation available</p>
+        )}
       </div>
 
       <div className="glass-card" style={styles.sectionCard}>
-        <h3 style={styles.sectionTitle}>Interpretation Note</h3>
-        <div style={styles.noteBox}>
-          {result.interpretation_note || "This explanation reflects AI model influence and not direct structural damage."}
-        </div>
-      </div>
-
-      <div className="glass-card" style={styles.sectionCard}>
-        <h3 style={styles.sectionTitle}>Scan Details</h3>
+        <h3 style={styles.sectionTitle}>Model Output Details</h3>
         <div style={styles.metaGrid}>
           <div style={styles.metaItem}>
             <div style={styles.metaLabel}>Patient Name</div>
@@ -217,28 +293,18 @@ export default function Results() {
           </div>
 
           <div style={styles.metaItem}>
-            <div style={styles.metaLabel}>Uploaded Scan</div>
+            <div style={styles.metaLabel}>Uploaded File</div>
             <div style={styles.metaValue}>{result.uploaded_file || "-"}</div>
           </div>
 
           <div style={styles.metaItem}>
-            <div style={styles.metaLabel}>Age</div>
-            <div style={styles.metaValue}>{result.age ?? "-"}</div>
+            <div style={styles.metaLabel}>BiLSTM Probability</div>
+            <div style={styles.metaValue}>{formatNumber(result.bilstm_probability)}</div>
           </div>
 
           <div style={styles.metaItem}>
-            <div style={styles.metaLabel}>Gender</div>
-            <div style={styles.metaValue}>{result.gender || "-"}</div>
-          </div>
-
-          <div style={styles.metaItem}>
-            <div style={styles.metaLabel}>IQ</div>
-            <div style={styles.metaValue}>{result.iq ?? "-"}</div>
-          </div>
-
-          <div style={styles.metaItem}>
-            <div style={styles.metaLabel}>Handedness</div>
-            <div style={styles.metaValue}>{result.handedness || "-"}</div>
+            <div style={styles.metaLabel}>Transformer Probability</div>
+            <div style={styles.metaValue}>{formatNumber(result.transformer_probability)}</div>
           </div>
         </div>
       </div>
@@ -338,6 +404,42 @@ const styles = {
     color: "#dbeafe",
     lineHeight: 1.8,
   },
+  previewGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+    gap: "18px",
+  },
+  previewCard: {
+    background: "#0d203d",
+    border: "1px solid #21406a",
+    borderRadius: "18px",
+    padding: "16px",
+  },
+  previewLabel: {
+    fontSize: "14px",
+    fontWeight: "700",
+    marginBottom: "12px",
+    color: "#dbeafe",
+  },
+  previewImage: {
+    width: "100%",
+    borderRadius: "14px",
+    display: "block",
+    border: "1px solid #274873",
+    background: "#071321",
+  },
+  previewFallback: {
+    minHeight: "220px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    color: "#9fb0ca",
+    background: "#071321",
+    borderRadius: "14px",
+    border: "1px solid #274873",
+    padding: "20px",
+  },
   regionGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -401,21 +503,35 @@ const styles = {
         ? "#fde68a"
         : "#93c5fd",
   }),
-  recommendBox: {
-    background: "rgba(16, 185, 129, 0.12)",
-    border: "1px solid #10b981",
-    borderRadius: "16px",
-    padding: "18px",
-    color: "#d1fae5",
-    lineHeight: 1.8,
+  connectionList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
   },
-  noteBox: {
-    background: "rgba(59, 130, 246, 0.12)",
-    border: "1px solid #3b82f6",
-    borderRadius: "16px",
-    padding: "18px",
+  connectionItem: {
+    background: "#0d203d",
+    border: "1px solid #21406a",
+    borderRadius: "14px",
+    padding: "16px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "14px",
+  },
+  connectionName: {
+    fontWeight: "700",
     color: "#dbeafe",
-    lineHeight: 1.8,
+  },
+  connectionSub: {
+    marginTop: "4px",
+    color: "#9fb0ca",
+    fontSize: "13px",
+  },
+  connectionScore: {
+    color: "#93c5fd",
+    fontWeight: "800",
+    fontSize: "16px",
+    whiteSpace: "nowrap",
   },
   metaGrid: {
     display: "grid",

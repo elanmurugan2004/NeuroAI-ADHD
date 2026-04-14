@@ -1,11 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from pathlib import Path
+from typing import Optional
 import uuid
 import traceback
+import base64
+
+import matplotlib
+matplotlib.use("Agg")
+
 import pandas as pd
 import numpy as np
 import nibabel as nib
+
+from nilearn.datasets import fetch_atlas_harvard_oxford
+from nilearn.image import mean_img, new_img_like, resample_to_img
+from nilearn.plotting import plot_img, plot_roi
 
 from app.database import get_db
 from app.models import Patient, Assessment, User
@@ -18,7 +28,10 @@ router = APIRouter(prefix="/assessments", tags=["Assessments"])
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 UPLOAD_DIR = ROOT_DIR / "uploads"
+PREVIEW_DIR = UPLOAD_DIR / "previews"
+
 UPLOAD_DIR.mkdir(exist_ok=True)
+PREVIEW_DIR.mkdir(exist_ok=True)
 
 MAX_FILE_SIZE_MB = 300
 MIN_AGE = 7
@@ -60,6 +73,126 @@ def _extract_primary_region_name(top_regions) -> str:
         )
 
     return str(first)
+
+
+def _file_to_data_url(file_path: Path) -> Optional[str]:
+    if not file_path.exists():
+        return None
+    encoded = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _match_region_to_atlas_value(region_name: str, atlas_labels) -> Optional[int]:
+    target = str(region_name).strip().lower()
+    if not target:
+        return None
+
+    # exact match
+    for idx, atlas_name in enumerate(atlas_labels):
+        atlas_name = str(atlas_name).strip()
+        atlas_lower = atlas_name.lower()
+
+        if idx == 0:
+            continue
+        if not atlas_name or atlas_lower in {"background", "unknown", "nan"}:
+            continue
+
+        if atlas_lower == target:
+            return idx
+
+    # partial match
+    for idx, atlas_name in enumerate(atlas_labels):
+        atlas_name = str(atlas_name).strip()
+        atlas_lower = atlas_name.lower()
+
+        if idx == 0:
+            continue
+        if not atlas_name or atlas_lower in {"background", "unknown", "nan"}:
+            continue
+
+        if target in atlas_lower or atlas_lower in target:
+            return idx
+
+    return None
+
+
+def _build_top_region_mask(top_regions, ref_img=None):
+    if not top_regions:
+        return None
+
+    atlas = fetch_atlas_harvard_oxford("cort-maxprob-thr25-2mm")
+
+    atlas_maps = atlas.maps
+    if isinstance(atlas_maps, nib.spatialimages.SpatialImage):
+        atlas_img = atlas_maps
+    else:
+        atlas_img = nib.load(str(atlas_maps))
+
+    atlas_data = atlas_img.get_fdata()
+    atlas_labels = atlas.labels
+
+    selected_values = []
+    for item in top_regions[:3]:
+        region_name = item.get("region") if isinstance(item, dict) else str(item)
+        value = _match_region_to_atlas_value(region_name, atlas_labels)
+        if value is not None:
+            selected_values.append(value)
+
+    if not selected_values:
+        return None
+
+    mask_data = np.isin(atlas_data, selected_values).astype(np.int16)
+    if np.max(mask_data) == 0:
+        return None
+
+    mask_img = new_img_like(atlas_img, mask_data)
+
+    if ref_img is not None:
+        mask_img = resample_to_img(
+            mask_img,
+            ref_img,
+            interpolation="nearest",
+            force_resample=True,
+            copy_header=True,
+        )
+
+    return mask_img
+
+
+def _generate_scan_preview_images(saved_file_path: Path, unique_prefix: str, top_regions):
+    original_png = PREVIEW_DIR / f"{unique_prefix}_original.png"
+    overlay_png = PREVIEW_DIR / f"{unique_prefix}_overlay.png"
+
+    mean_scan = mean_img(str(saved_file_path))
+
+    plot_img(
+        mean_scan,
+        display_mode="ortho",
+        draw_cross=False,
+        colorbar=False,
+        annotate=True,
+        cmap="gray",
+        output_file=str(original_png),
+    )
+
+    overlay_data_url = None
+    mask_img = _build_top_region_mask(top_regions, ref_img=mean_scan)
+
+    if mask_img is not None:
+        plot_roi(
+            mask_img,
+            bg_img=mean_scan,
+            display_mode="ortho",
+            draw_cross=False,
+            annotate=True,
+            output_file=str(overlay_png),
+        )
+        overlay_data_url = _file_to_data_url(overlay_png)
+
+    return {
+        "scan_preview_original": _file_to_data_url(original_png),
+        "scan_preview_overlay": overlay_data_url,
+    }
 
 
 @router.post("/predict")
@@ -193,17 +326,16 @@ def create_assessment(
         )
 
         top_regions = explain_out.get("top_regions", [])
+        top_connections = explain_out.get("top_connections", [])
         clinical_summary = explain_out.get(
             "clinical_summary",
             "AI-generated regional explanation is available for this scan."
         )
-        recommendation = explain_out.get(
-            "recommendation",
-            "Clinical review is recommended."
-        )
-        interpretation_note = explain_out.get(
-            "interpretation_note",
-            "This explanation reflects AI model influence and not direct structural damage."
+
+        preview_data = _generate_scan_preview_images(
+            saved_file_path=saved_file_path,
+            unique_prefix=unique_name.replace(".nii.gz", "").replace(".nii", ""),
+            top_regions=top_regions,
         )
 
         primary_region = _extract_primary_region_name(top_regions)
@@ -245,9 +377,10 @@ def create_assessment(
             "medication": medication,
             "subtype": subtype,
             "top_regions": top_regions,
+            "top_connections": top_connections,
             "clinical_summary": clinical_summary,
-            "recommendation": recommendation,
-            "interpretation_note": interpretation_note,
+            "scan_preview_original": preview_data.get("scan_preview_original"),
+            "scan_preview_overlay": preview_data.get("scan_preview_overlay"),
         }
 
     except HTTPException:
