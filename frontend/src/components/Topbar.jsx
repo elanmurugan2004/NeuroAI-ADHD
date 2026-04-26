@@ -28,6 +28,7 @@ export default function Topbar() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
     localStorage.removeItem("assessment_result");
     navigate("/login");

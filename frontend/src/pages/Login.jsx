@@ -4,10 +4,15 @@ import API from "../api/axios";
 
 export default function Login() {
   const navigate = useNavigate();
+
   const [form, setForm] = useState({
     email: "",
     password: "",
   });
+
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -18,32 +23,46 @@ export default function Login() {
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    setErrorMsg("");
+    setSuccessMsg("");
   };
 
   const handleLogin = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg("");
+    setSuccessMsg("");
 
-  try {
-    const res = await API.post("/auth/login", form);
+    try {
+      const res = await API.post("/auth/login", form);
 
-    localStorage.setItem("token", res.data.access_token);
-    localStorage.setItem("user", JSON.stringify(res.data.user));
+      localStorage.setItem("token", res.data.access_token);
+      localStorage.setItem("refresh_token", res.data.refresh_token);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
 
-    alert("Login successful");
-    navigate("/app/dashboard");
-  } catch (error) {
-    alert(error?.response?.data?.detail || "Invalid email or password");
-  }
-};
+      setSuccessMsg("Login successful. Redirecting...");
+
+      setTimeout(() => {
+        navigate("/app/dashboard");
+      }, 800);
+    } catch (error) {
+      setErrorMsg(error?.response?.data?.detail || "Invalid email or password");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={styles.page}>
       <div className="glass-card" style={styles.card}>
-        <h2>Doctor Login</h2>
+        <h2 style={styles.title}>Doctor Login</h2>
         <p style={styles.sub}>Secure access to the NeuroAI clinical dashboard</p>
 
+        {successMsg && <div style={styles.successBox}>{successMsg}</div>}
+        {errorMsg && <div style={styles.errorBox}>{errorMsg}</div>}
+
         <form onSubmit={handleLogin}>
-          <label>Email</label>
+          <label style={styles.label}>Email</label>
           <input
             type="email"
             name="email"
@@ -53,7 +72,7 @@ export default function Login() {
             required
           />
 
-          <label>Password</label>
+          <label style={styles.label}>Password</label>
           <input
             type="password"
             name="password"
@@ -63,8 +82,13 @@ export default function Login() {
             required
           />
 
-          <button className="primary-btn" type="submit" style={{ width: "100%", marginTop: 10 }}>
-            Login
+          <button
+            className="primary-btn"
+            type="submit"
+            style={{ width: "100%", marginTop: 10 }}
+            disabled={loading}
+          >
+            {loading ? "Logging in..." : "Login"}
           </button>
         </form>
 
@@ -89,9 +113,38 @@ const styles = {
     maxWidth: "450px",
     padding: "28px",
   },
+  title: {
+    marginBottom: "8px",
+  },
   sub: {
     color: "#9fb0ca",
     marginBottom: "22px",
+  },
+  label: {
+    display: "block",
+    marginBottom: "6px",
+    marginTop: "10px",
+    fontWeight: "600",
+  },
+  successBox: {
+    marginBottom: "16px",
+    background: "rgba(16, 185, 129, 0.14)",
+    border: "1px solid #10b981",
+    color: "#d1fae5",
+    borderRadius: "12px",
+    padding: "12px 14px",
+    fontSize: "14px",
+    fontWeight: "600",
+  },
+  errorBox: {
+    marginBottom: "16px",
+    background: "rgba(239, 68, 68, 0.14)",
+    border: "1px solid #ef4444",
+    color: "#fecaca",
+    borderRadius: "12px",
+    padding: "12px 14px",
+    fontSize: "14px",
+    fontWeight: "600",
   },
   footer: {
     marginTop: "18px",
