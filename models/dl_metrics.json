@@ -1,0 +1,22 @@
+{
+  "bilstm_accuracy": 0.6615384615384615,
+  "transformer_accuracy": 0.6384615384615384,
+  "ensemble_accuracy": 0.7461538461538462,
+  "bilstm_roc_auc": 0.6983418367346939,
+  "transformer_roc_auc": 0.6737882653061225,
+  "ensemble_roc_auc": 0.6737882653061225,
+  "ensemble_balanced_accuracy": 0.49489795918367346,
+  "ensemble_f1": 0.0,
+  "n_features": 564,
+  "selected_conn_feature_count": 500,
+  "train_size": 413,
+  "val_size": 104,
+  "test_size": 130,
+  "best_bilstm_weight": 0.0,
+  "best_transformer_weight": 1.0,
+  "best_threshold": 0.7,
+  "class_weight": {
+    "0": 0.6618589743589743,
+    "1": 2.0445544554455446
+  }
+}
