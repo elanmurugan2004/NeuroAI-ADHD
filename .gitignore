@@ -216,3 +216,5 @@ node_modules/
 *.pt
 *.pth
 *.pkl
+backend/uploads/previews/
+backend/neuroai_adhd.db
