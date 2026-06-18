@@ -359,10 +359,10 @@ python models/train.py --epochs 100 --batch-size 32 --lr 0.0001
 
 | Role | Name |
 |---|---|
-| **Lead Developer & ML Engineering** | Elan |
-| **Data Processing & Feature Engineering** | [Team Member 2] |
-| **Frontend Development & UI/UX** | [Team Member 3] |
-| **Testing, Evaluation & Documentation** | [Team Member 4] |
+| **Lead Developer & ML Engineering** | Elamurugan V |
+| **Data Processing & Feature Engineering** | Arun kumar T |
+| **Frontend Development & UI/UX** | Gunal R |
+| **Testing, Evaluation & Documentation** | Guruchidambaram A |
 | **Project Supervisor** | **Ms. Subathra C, M.E.** |
 
 **Institution:** United Institute of Technology (UIT), Coimbatore  
@@ -376,7 +376,7 @@ python models/train.py --epochs 100 --batch-size 32 --lr 0.0001
 - ✅ **Data Preprocessing**: Complete
 - ✅ **Model Training**: Complete (BiLSTM-Transformer ensemble)
 - ✅ **Backend API**: Complete
-- ✅ **Frontend UI**: In Progress
+- ✅ **Frontend UI**: Complete
 - ✅ **XAI Module**: Complete
 - 🔄 **Clinical Validation**: Planned
 - 🔄 **Deployment**: In Progress
